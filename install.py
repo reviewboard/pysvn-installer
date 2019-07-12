@@ -105,6 +105,8 @@ def extract_pysvn(tarball_path):
 
 
 def build_pysvn(src_path, install=True):
+    system = platform.system()
+
     os.chdir(src_path)
 
     # Locate the PyCXX Import version, so we can force its usage during
@@ -136,7 +138,7 @@ def build_pysvn(src_path, install=True):
 
     config_args = ['--pycxx-dir="%s"' % pycxx_path]
 
-    if platform.system() == 'Darwin':
+    if system == 'Darwin':
         config_args.append('--link-python-framework-via-dynamic-lookup')
 
     setup_py = setup_py.replace(config_token,
@@ -146,6 +148,17 @@ def build_pysvn(src_path, install=True):
     with open(setup_py_path, 'w') as fp:
         fp.write(setup_py)
 
+    if system == 'Darwin':
+        # We want to make sure we're using Homebrew's version of APR/APU,
+        # if available.
+        apr_config_path = '/usr/local/opt/apr/bin/apr-1-config'
+        apu_config_path = '/usr/local/opt/apr-util/bin/apu-1-config'
+
+        if os.path.exists(apr_config_path):
+            os.environ.setdefault('APR_CONFIG', apr_config_path)
+
+        if os.path.exists(apu_config_path):
+            os.environ.setdefault('APU_CONFIG', apu_config_path)
 
     if install:
         cmd_args = ['-m', 'pip', 'install', src_path]
