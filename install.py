@@ -152,7 +152,7 @@ def build_pysvn(src_path, install=True):
     else:
         cmd_args = ['setup.py', 'bdist_wheel', '--dist-dir', cwd]
 
-    subprocess.call([sys.executable] + cmd_args)
+    return subprocess.call([sys.executable] + cmd_args)
 
 
 def main():
@@ -194,12 +194,52 @@ def main():
 
     print('Building PySVN...')
     src_path = extract_pysvn(tarball_path)
-    build_pysvn(src_path, install=not args.build_only)
+    retcode = build_pysvn(src_path, install=not args.build_only)
 
-    if args.build_only:
-        print('PySVN is built. The wheel is in the current directory.')
+    if retcode == 0:
+        if args.build_only:
+            print('PySVN is built. The wheel is in the current directory.')
+        else:
+            print('PySVN is installed.')
     else:
-        print('PySVN is installed.')
+        sys.stderr.write('\n')
+        sys.stderr.write('PySVN failed to install. You might be missing some '
+                         'dependencies.\n')
+
+        system = platform.system()
+
+        if system == 'Darwin':
+            sys.stderr.write('On macOS, run:\n')
+            sys.stderr.write('\n')
+            sys.stderr.write('    $ xcode-select --install\n')
+            sys.stderr.write('    $ brew install apr-util\n')
+            sys.stderr.write('\n')
+            sys.stderr.write('Note that you will need to install Homebrew '
+                             'from https://brew.sh/\n')
+        elif system == 'Linux':
+            if sys.version_info[0] == 3:
+                pkg_prefix = 'python3'
+            else:
+                pkg_prefix = 'python'
+
+            sys.stderr.write('On Linux, you will need Python development '
+                             'headers and\n')
+            sys.stderr.write('Subversion development libraries.\n')
+            sys.stderr.write('\n')
+            sys.stderr.write('For Ubuntu:\n')
+            sys.stderr.write('\n')
+            sys.stderr.write('    $ sudo apt-get install %s-dev\n'
+                             % pkg_prefix)
+            sys.stderr.write('    $ sudo apt-get build-dep %s-svn\n'
+                             % pkg_prefix)
+            sys.stderr.write('\n')
+            sys.stderr.write('For RHEL/CentOS:\n')
+            sys.stderr.write('\n')
+            sys.stderr.write('    $ sudo yum install %s-devel '
+                             'subversion-devel\n'
+                             % pkg_prefix)
+
+        sys.exit(1)
 
 
 if __name__ == '__main__':
