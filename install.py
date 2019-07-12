@@ -5,6 +5,8 @@
 #
 # By default, this will install a wheel for the latest version of PySVN.
 
+from __future__ import print_function, unicode_literals
+
 import argparse
 import atexit
 import glob
@@ -148,28 +150,67 @@ def build_pysvn(src_path, install=True):
         debug('Enabling macOS framework support\n')
         config_args.append('--link-python-framework-via-dynamic-lookup')
 
+        # We want to include a few additional places to look for APR headers
+        # and libraries. We'll start by seeing if Homebrew has some
+        # information, and we'll then proceed to including the XCode versions.
+        apr_config_path = '/usr/local/opt/apr/bin/apr-1-config'
+        apu_config_path = '/usr/local/opt/apr-util/bin/apu-1-config'
+
+        extra_apr_include_paths = []
+        extra_apr_lib_paths = []
+        extra_apu_include_paths = []
+
+        if os.path.exists(apr_config_path):
+            extra_apr_include_paths.append(
+                subprocess.check_output([apr_config_path, '--includedir'])
+                .decode('utf-8').strip())
+
+            brew_apr_prefix = (
+                subprocess.check_output([apr_config_path, '--prefix'])
+                .decode('utf-8').strip()
+            )
+
+            extra_apr_lib_paths.append(os.path.join(brew_apr_prefix, 'lib'))
+
+        if os.path.exists(apu_config_path):
+            extra_apu_include_paths.append(
+                subprocess.check_output([apu_config_path, '--includedir'])
+                .decode('utf-8').strip())
+
+        # XCode bundle both APU directories under the same path.
+        xcode_apr_path = (
+            '/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk'
+            '/usr/include/apr-1')
+        extra_apr_include_paths.append(xcode_apr_path)
+        extra_apu_include_paths.append(xcode_apr_path)
+
+        debug('Extra APR include paths: %r\n' % (extra_apr_include_paths,))
+        debug('Extra APR lib paths: %r\n' % (extra_apr_lib_paths,))
+        debug('Extra APU include paths: %r\n' % (extra_apu_include_paths,))
+
+        for path in extra_apr_include_paths:
+            if os.path.exists(os.path.join(path, 'apr.h')):
+                config_args.append('--apr-inc-dir="%s"' % path)
+                break
+
+        for path in extra_apr_lib_paths:
+            if os.path.exists(os.path.join(path, 'libapr-1.dylib')):
+                config_args.append('--apr-lib-dir="%s"' % path)
+                break
+
+        for path in extra_apu_include_paths:
+            if os.path.exists(os.path.join(path, 'apr.h')):
+                config_args.append('--apu-inc-dir="%s"' % path)
+                break
+
+    debug('Using configuration arguments: %r\n' % (config_args,))
+
     setup_py = setup_py.replace(config_token,
                                 '%s %s' % (config_token,
                                            ' '.join(config_args)))
 
     with open(setup_py_path, 'w') as fp:
         fp.write(setup_py)
-
-    if system == 'Darwin':
-        # We want to make sure we're using Homebrew's version of APR/APU,
-        # if available.
-        apr_config_path = '/usr/local/opt/apr/bin/apr-1-config'
-        apu_config_path = '/usr/local/opt/apr-util/bin/apu-1-config'
-
-        if os.path.exists(apr_config_path):
-            debug('Setting $APR_CONFIG to %s\n' % apr_config_path)
-            os.environ.setdefault('APR_CONFIG', apr_config_path)
-            os.putenv('APR_CONFIG', apr_config_path)
-
-        if os.path.exists(apu_config_path):
-            debug('Setting $APU_CONFIG to %s\n' % apu_config_path)
-            os.environ.setdefault('APU_CONFIG', apu_config_path)
-            os.putenv('APU_CONFIG', apu_config_path)
 
     if install:
         cmd_args = ['-m', 'pip', 'install', src_path]
@@ -225,6 +266,8 @@ def main():
     retcode = build_pysvn(src_path, install=not args.build_only)
 
     if retcode == 0:
+        print()
+
         if args.build_only:
             print('PySVN is built. The wheel is in the current directory.')
         else:
