@@ -51,10 +51,16 @@ VERSION_RE = \
 
 cwd = None
 temp_path = None
+_debug_mode = (os.environ.get('DEBUG_PYSVN_INSTALLER') == '1')
 
 
 def destroy_temp():
     shutil.rmtree(temp_path)
+
+
+def debug(msg):
+    if _debug_mode:
+        sys.stderr.write(msg)
 
 
 def get_pysvn_version():
@@ -139,6 +145,7 @@ def build_pysvn(src_path, install=True):
     config_args = ['--pycxx-dir="%s"' % pycxx_path]
 
     if system == 'Darwin':
+        debug('Enabling macOS framework support\n')
         config_args.append('--link-python-framework-via-dynamic-lookup')
 
     setup_py = setup_py.replace(config_token,
@@ -155,10 +162,14 @@ def build_pysvn(src_path, install=True):
         apu_config_path = '/usr/local/opt/apr-util/bin/apu-1-config'
 
         if os.path.exists(apr_config_path):
+            debug('Setting $APR_CONFIG to %s\n' % apr_config_path)
             os.environ.setdefault('APR_CONFIG', apr_config_path)
+            os.putenv('APR_CONFIG', apr_config_path)
 
         if os.path.exists(apu_config_path):
+            debug('Setting $APU_CONFIG to %s\n' % apu_config_path)
             os.environ.setdefault('APU_CONFIG', apu_config_path)
+            os.putenv('APU_CONFIG', apu_config_path)
 
     if install:
         cmd_args = ['-m', 'pip', 'install', src_path]
