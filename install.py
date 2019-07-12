@@ -185,11 +185,15 @@ def main():
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--pysvn-version',
+                        default=os.environ.get('PYSVN_INSTALLER_VERSION'),
                         help='A specific version of PySVN to install.')
     parser.add_argument('--file',
+                        default=os.environ.get('PYSVN_INSTALLER_SRC_FILE'),
                         help='A specific PySVN source tarball to install.')
     parser.add_argument('--build-only',
                         action='store_true',
+                        default=os.environ.get('PYSVN_INSTALLER_BUILD_ONLY',
+                                               False),
                         help="Build a wheel, but don't install it. The "
                              "wheel will be stored in the current directory.")
 
