@@ -199,7 +199,7 @@ def build_pysvn(src_path, install=True):
                 break
 
         for path in extra_apu_include_paths:
-            if os.path.exists(os.path.join(path, 'apr.h')):
+            if os.path.exists(os.path.join(path, 'apu.h')):
                 config_args.append('--apu-inc-dir="%s"' % path)
                 break
 
