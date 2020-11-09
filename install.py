@@ -316,7 +316,6 @@ def main():
             sys.stderr.write('On macOS, run:\n')
             sys.stderr.write('\n')
             sys.stderr.write('    $ xcode-select --install\n')
-            sys.stderr.write('    $ brew install apr-util\n')
             sys.stderr.write('    $ brew install subversion\n')
             sys.stderr.write('\n')
             sys.stderr.write('Note that you will need to install Homebrew '
