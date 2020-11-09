@@ -88,6 +88,8 @@ def fetch_pysvn(pysvn_version):
         'version': pysvn_version,
     }
 
+    debug('PySVN URL: %s\n' % url)
+
     tarball_path = os.path.join(temp_path, 'pysvn.tar.gz')
 
     try:
@@ -150,15 +152,19 @@ def build_pysvn(src_path, install=True):
         debug('Enabling macOS framework support\n')
         config_args.append('--link-python-framework-via-dynamic-lookup')
 
-        # We want to include a few additional places to look for APR headers
+        # We want to include a few additional places to look for headers
         # and libraries. We'll start by seeing if Homebrew has some
         # information, and we'll then proceed to including the XCode versions.
+        brew_svn_path = '/usr/local/opt/subversion'
         apr_config_path = '/usr/local/opt/apr/bin/apr-1-config'
         apu_config_path = '/usr/local/opt/apr-util/bin/apu-1-config'
 
         extra_apr_include_paths = []
         extra_apr_lib_paths = []
         extra_apu_include_paths = []
+        extra_svn_bin_paths = []
+        extra_svn_include_paths = []
+        extra_svn_lib_paths = []
 
         if os.path.exists(apr_config_path):
             extra_apr_include_paths.append(
@@ -177,6 +183,14 @@ def build_pysvn(src_path, install=True):
                 subprocess.check_output([apu_config_path, '--includedir'])
                 .decode('utf-8').strip())
 
+        if os.path.exists(brew_svn_path):
+            # If SVN is installed from brew, we'll want to use those paths.
+            extra_svn_bin_paths.append(os.path.join(brew_svn_path, 'bin'))
+            extra_svn_include_paths.append(os.path.join(brew_svn_path,
+                                                        'include',
+                                                        'subversion-1'))
+            extra_svn_lib_paths.append(os.path.join(brew_svn_path, 'lib'))
+
         # XCode bundle both APU directories under the same path.
         xcode_apr_path = (
             '/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk'
@@ -187,6 +201,9 @@ def build_pysvn(src_path, install=True):
         debug('Extra APR include paths: %r\n' % (extra_apr_include_paths,))
         debug('Extra APR lib paths: %r\n' % (extra_apr_lib_paths,))
         debug('Extra APU include paths: %r\n' % (extra_apu_include_paths,))
+        debug('Extra SVN bin paths: %r\n' % (extra_svn_bin_paths,))
+        debug('Extra SVN include paths: %r\n' % (extra_svn_include_paths,))
+        debug('Extra SVN lib paths: %r\n' % (extra_svn_lib_paths,))
 
         for path in extra_apr_include_paths:
             if os.path.exists(os.path.join(path, 'apr.h')):
@@ -201,6 +218,21 @@ def build_pysvn(src_path, install=True):
         for path in extra_apu_include_paths:
             if os.path.exists(os.path.join(path, 'apu.h')):
                 config_args.append('--apu-inc-dir="%s"' % path)
+                break
+
+        for path in extra_svn_bin_paths:
+            if os.path.exists(os.path.join(path, 'svn')):
+                config_args.append('--svn-bin-dir="%s"' % path)
+                break
+
+        for path in extra_svn_include_paths:
+            if os.path.exists(os.path.join(path, 'svn_client.h')):
+                config_args.append('--svn-inc-dir="%s"' % path)
+                break
+
+        for path in extra_svn_lib_paths:
+            if os.path.exists(os.path.join(path, 'libsvn_client-1.a')):
+                config_args.append('--svn-lib-dir="%s"' % path)
                 break
 
     debug('Using configuration arguments: %r\n' % (config_args,))
@@ -257,6 +289,7 @@ def main():
         else:
             print('Looking up latest PySVN version...')
             pysvn_version = get_pysvn_version()
+            debug('PySVN %s\n' % pysvn_version)
 
         print('Downloading PySVN %s...' % pysvn_version)
         tarball_path = fetch_pysvn(pysvn_version)
@@ -284,6 +317,7 @@ def main():
             sys.stderr.write('\n')
             sys.stderr.write('    $ xcode-select --install\n')
             sys.stderr.write('    $ brew install apr-util\n')
+            sys.stderr.write('    $ brew install subversion\n')
             sys.stderr.write('\n')
             sys.stderr.write('Note that you will need to install Homebrew '
                              'from https://brew.sh/\n')
