@@ -289,6 +289,10 @@ def main():
         else:
             print('Looking up latest PySVN version...')
             pysvn_version = get_pysvn_version()
+
+            if pysvn_version == '1.9.13':
+                pysvn_version = '1.9.12'
+
             debug('PySVN %s\n' % pysvn_version)
 
         print('Downloading PySVN %s...' % pysvn_version)
