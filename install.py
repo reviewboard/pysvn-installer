@@ -18,6 +18,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+from subprocess import CalledProcessError
 
 try:
     # Python 3
@@ -114,6 +115,21 @@ def extract_pysvn(tarball_path):
         sys.exit(1)
 
 
+def get_brew_prefix(package):
+    try:
+        path = (
+            subprocess.check_output(['brew', '--prefix', package])
+            .strip()
+            .decode('utf-8')
+        )
+        debug('%s was found in brew: %s\n' % (package, path))
+
+        return path
+    except CalledProcessError:
+        debug('%s was not found in brew\n' % package)
+        return None
+
+
 def build_pysvn(src_path, install=True):
     system = platform.system()
 
@@ -155,9 +171,9 @@ def build_pysvn(src_path, install=True):
         # We want to include a few additional places to look for headers
         # and libraries. We'll start by seeing if Homebrew has some
         # information, and we'll then proceed to including the XCode versions.
-        brew_svn_path = '/usr/local/opt/subversion'
-        apr_config_path = '/usr/local/opt/apr/bin/apr-1-config'
-        apu_config_path = '/usr/local/opt/apr-util/bin/apu-1-config'
+        brew_svn_path = get_brew_prefix('subversion')
+        brew_apr_path = get_brew_prefix('apr')
+        brew_apr_util_path = get_brew_prefix('apr-util')
 
         extra_apr_include_paths = []
         extra_apr_lib_paths = []
@@ -166,24 +182,33 @@ def build_pysvn(src_path, install=True):
         extra_svn_include_paths = []
         extra_svn_lib_paths = []
 
-        if os.path.exists(apr_config_path):
-            extra_apr_include_paths.append(
-                subprocess.check_output([apr_config_path, '--includedir'])
-                .decode('utf-8').strip())
+        if brew_apr_path:
+            apr_config_path = os.path.join(brew_apr_path, 'bin',
+                                           'apr-1-config')
 
-            brew_apr_prefix = (
-                subprocess.check_output([apr_config_path, '--prefix'])
-                .decode('utf-8').strip()
-            )
+            if os.path.exists(apr_config_path):
+                extra_apr_include_paths.append(
+                    subprocess.check_output([apr_config_path, '--includedir'])
+                    .decode('utf-8').strip())
 
-            extra_apr_lib_paths.append(os.path.join(brew_apr_prefix, 'lib'))
+                brew_apr_prefix = (
+                    subprocess.check_output([apr_config_path, '--prefix'])
+                    .decode('utf-8').strip()
+                )
 
-        if os.path.exists(apu_config_path):
-            extra_apu_include_paths.append(
-                subprocess.check_output([apu_config_path, '--includedir'])
-                .decode('utf-8').strip())
+                extra_apr_lib_paths.append(os.path.join(brew_apr_prefix,
+                                                        'lib'))
 
-        if os.path.exists(brew_svn_path):
+        if brew_apr_util_path:
+            apu_config_path = os.path.join(brew_apr_util_path, 'bin',
+                                           'apu-1-config')
+
+            if os.path.exists(apu_config_path):
+                extra_apu_include_paths.append(
+                    subprocess.check_output([apu_config_path, '--includedir'])
+                    .decode('utf-8').strip())
+
+        if brew_svn_path and os.path.exists(brew_svn_path):
             # If SVN is installed from brew, we'll want to use those paths.
             extra_svn_bin_paths.append(os.path.join(brew_svn_path, 'bin'))
             extra_svn_include_paths.append(os.path.join(brew_svn_path,
