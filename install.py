@@ -130,8 +130,53 @@ def get_brew_prefix(package):
         return None
 
 
+def get_linux_arch():
+    """Return the current multiarch architecture for Linux.
+
+    Returns:
+        str:
+        The architecture, or ``None`` if it can't be determined.
+    """
+    try:
+        return (
+            subprocess.check_output(['gcc', '-dumpmachine'])
+            .strip()
+            .decode('utf-8')
+        )
+    except CalledProcessError:
+        return None
+
+
+def get_linux_arch_dirs():
+    """Return a list of Linux multiarch library directories.
+
+    These will be based off the current architecture. Only paths that exist
+    will be returned.
+
+    Returns:
+        list of str:
+        The list of multiarch directories.
+    """
+    linux_arch = get_linux_arch()
+
+    if not linux_arch:
+        return []
+
+    return [
+        path
+        for path in [
+            '/usr/lib/%s' % linux_arch,
+            '/usr/local/lib/%s' % linux_arch,
+        ]
+        if os.path.exists(path)
+    ]
+
+
 def build_pysvn(src_path, install=True):
     system = platform.system()
+    debug('System = %s\n' % system)
+    debug('Machine = %s\n' % platform.machine())
+    debug('Processor = %s\n' % platform.processor())
 
     os.chdir(src_path)
 
@@ -164,8 +209,22 @@ def build_pysvn(src_path, install=True):
 
     config_args = ['--pycxx-dir="%s"' % pycxx_path]
 
+    extra_apr_include_paths = []
+    extra_apr_lib_paths = []
+    extra_apu_include_paths = []
+    extra_svn_bin_paths = []
+    extra_svn_include_paths = []
+    extra_svn_lib_paths = []
+
+    libsvn_client_filename = None
+    libapr_filename = None
+
     if system == 'Darwin':
         debug('Enabling macOS framework support\n')
+
+        libapr_filename = 'libapr-1.dylib'
+        libsvn_client_filename = 'libsvn_client-1.a'
+
         config_args.append('--link-python-framework-via-dynamic-lookup')
 
         # We want to include a few additional places to look for headers
@@ -174,13 +233,6 @@ def build_pysvn(src_path, install=True):
         brew_svn_path = get_brew_prefix('subversion')
         brew_apr_path = get_brew_prefix('apr')
         brew_apr_util_path = get_brew_prefix('apr-util')
-
-        extra_apr_include_paths = []
-        extra_apr_lib_paths = []
-        extra_apu_include_paths = []
-        extra_svn_bin_paths = []
-        extra_svn_include_paths = []
-        extra_svn_lib_paths = []
 
         if brew_apr_path:
             apr_config_path = os.path.join(brew_apr_path, 'bin',
@@ -222,41 +274,52 @@ def build_pysvn(src_path, install=True):
             '/usr/include/apr-1')
         extra_apr_include_paths.append(xcode_apr_path)
         extra_apu_include_paths.append(xcode_apr_path)
+    elif system == 'Linux':
+        libapr_filename = 'libapr-1.so'
+        libsvn_client_filename = 'libsvn_client-1.so'
 
-        debug('Extra APR include paths: %r\n' % (extra_apr_include_paths,))
-        debug('Extra APR lib paths: %r\n' % (extra_apr_lib_paths,))
-        debug('Extra APU include paths: %r\n' % (extra_apu_include_paths,))
-        debug('Extra SVN bin paths: %r\n' % (extra_svn_bin_paths,))
-        debug('Extra SVN include paths: %r\n' % (extra_svn_include_paths,))
-        debug('Extra SVN lib paths: %r\n' % (extra_svn_lib_paths,))
+        linux_arch_dirs = get_linux_arch_dirs()
+        debug('Linux arch directories: %r\n' % linux_arch_dirs)
 
-        for path in extra_apr_include_paths:
-            if os.path.exists(os.path.join(path, 'apr.h')):
-                config_args.append('--apr-inc-dir="%s"' % path)
-                break
+        extra_apr_lib_paths += linux_arch_dirs
+        extra_svn_lib_paths += linux_arch_dirs
 
+    debug('Extra APR include paths: %r\n' % (extra_apr_include_paths,))
+    debug('Extra APR lib paths: %r\n' % (extra_apr_lib_paths,))
+    debug('Extra APU include paths: %r\n' % (extra_apu_include_paths,))
+    debug('Extra SVN bin paths: %r\n' % (extra_svn_bin_paths,))
+    debug('Extra SVN include paths: %r\n' % (extra_svn_include_paths,))
+    debug('Extra SVN lib paths: %r\n' % (extra_svn_lib_paths,))
+
+    for path in extra_apr_include_paths:
+        if os.path.exists(os.path.join(path, 'apr.h')):
+            config_args.append('--apr-inc-dir="%s"' % path)
+            break
+
+    if libapr_filename:
         for path in extra_apr_lib_paths:
-            if os.path.exists(os.path.join(path, 'libapr-1.dylib')):
+            if os.path.exists(os.path.join(path, libapr_filename)):
                 config_args.append('--apr-lib-dir="%s"' % path)
                 break
 
-        for path in extra_apu_include_paths:
-            if os.path.exists(os.path.join(path, 'apu.h')):
-                config_args.append('--apu-inc-dir="%s"' % path)
-                break
+    for path in extra_apu_include_paths:
+        if os.path.exists(os.path.join(path, 'apu.h')):
+            config_args.append('--apu-inc-dir="%s"' % path)
+            break
 
-        for path in extra_svn_bin_paths:
-            if os.path.exists(os.path.join(path, 'svn')):
-                config_args.append('--svn-bin-dir="%s"' % path)
-                break
+    for path in extra_svn_bin_paths:
+        if os.path.exists(os.path.join(path, 'svn')):
+            config_args.append('--svn-bin-dir="%s"' % path)
+            break
 
-        for path in extra_svn_include_paths:
-            if os.path.exists(os.path.join(path, 'svn_client.h')):
-                config_args.append('--svn-inc-dir="%s"' % path)
-                break
+    for path in extra_svn_include_paths:
+        if os.path.exists(os.path.join(path, 'svn_client.h')):
+            config_args.append('--svn-inc-dir="%s"' % path)
+            break
 
+    if libsvn_client_filename:
         for path in extra_svn_lib_paths:
-            if os.path.exists(os.path.join(path, 'libsvn_client-1.a')):
+            if os.path.exists(os.path.join(path, libsvn_client_filename)):
                 config_args.append('--svn-lib-dir="%s"' % path)
                 break
 
@@ -274,7 +337,10 @@ def build_pysvn(src_path, install=True):
     else:
         cmd_args = ['setup.py', 'bdist_wheel', '--dist-dir', cwd]
 
-    return subprocess.call([sys.executable] + cmd_args)
+    result = subprocess.call([sys.executable] + cmd_args)
+    debug('Exit code = %s\n' % result)
+
+    return result
 
 
 def main():
