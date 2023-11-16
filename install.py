@@ -9,6 +9,7 @@ from __future__ import print_function, unicode_literals
 
 import argparse
 import atexit
+import getpass
 import glob
 import os
 import platform
@@ -216,6 +217,9 @@ def build_pysvn(src_path, install=True):
     extra_svn_include_paths = []
     extra_svn_lib_paths = []
 
+    apr_config_path = None
+    apu_config_path = None
+
     libsvn_client_filename = None
     libapr_filename = None
 
@@ -238,27 +242,9 @@ def build_pysvn(src_path, install=True):
             apr_config_path = os.path.join(brew_apr_path, 'bin',
                                            'apr-1-config')
 
-            if os.path.exists(apr_config_path):
-                extra_apr_include_paths.append(
-                    subprocess.check_output([apr_config_path, '--includedir'])
-                    .decode('utf-8').strip())
-
-                brew_apr_prefix = (
-                    subprocess.check_output([apr_config_path, '--prefix'])
-                    .decode('utf-8').strip()
-                )
-
-                extra_apr_lib_paths.append(os.path.join(brew_apr_prefix,
-                                                        'lib'))
-
         if brew_apr_util_path:
             apu_config_path = os.path.join(brew_apr_util_path, 'bin',
                                            'apu-1-config')
-
-            if os.path.exists(apu_config_path):
-                extra_apu_include_paths.append(
-                    subprocess.check_output([apu_config_path, '--includedir'])
-                    .decode('utf-8').strip())
 
         if brew_svn_path and os.path.exists(brew_svn_path):
             # If SVN is installed from brew, we'll want to use those paths.
@@ -278,11 +264,42 @@ def build_pysvn(src_path, install=True):
         libapr_filename = 'libapr-1.so'
         libsvn_client_filename = 'libsvn_client-1.so'
 
-        linux_arch_dirs = get_linux_arch_dirs()
-        debug('Linux arch directories: %r\n' % linux_arch_dirs)
+        if getpass.getuser() == 'bitnami':
+            debug('Installing for Bitnami\n')
 
-        extra_apr_lib_paths += linux_arch_dirs
-        extra_svn_lib_paths += linux_arch_dirs
+            apr_config_path = '/opt/bitnami/apache/bin/apr-1-config'
+            apu_config_path = '/opt/bitnami/apache/bin/apu-1-config'
+            extra_svn_bin_paths.append('/opt/bitnami/subversion/bin')
+            extra_svn_lib_paths.append('/opt/bitnami/subversion/lib')
+            extra_svn_include_paths.append(
+                '/opt/bitnami/subversion/include/subversion-1')
+        else:
+            linux_arch_dirs = get_linux_arch_dirs()
+            debug('Linux arch directories: %r\n' % linux_arch_dirs)
+
+            extra_apr_lib_paths += linux_arch_dirs
+            extra_svn_lib_paths += linux_arch_dirs
+
+    # Scan for any directories based on the apu-1-config/apr-1-config tools.
+    # We'll prefer these paths over any others.
+    if apr_config_path and os.path.exists(apr_config_path):
+        extra_apr_include_paths.insert(
+            0,
+            subprocess.check_output([apr_config_path, '--includedir'])
+            .decode('utf-8').strip())
+
+        apr_prefix = (
+            subprocess.check_output([apr_config_path, '--prefix'])
+            .decode('utf-8').strip()
+        )
+
+        extra_apr_lib_paths.append(os.path.join(apr_prefix, 'lib'))
+
+    if apu_config_path and os.path.exists(apu_config_path):
+        extra_apu_include_paths.insert(
+            0,
+            subprocess.check_output([apu_config_path, '--includedir'])
+            .decode('utf-8').strip())
 
     debug('Extra APR include paths: %r\n' % (extra_apr_include_paths,))
     debug('Extra APR lib paths: %r\n' % (extra_apr_lib_paths,))
